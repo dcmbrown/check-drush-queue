@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+#
+# file: check_purge_queue
+# description: checks the status of the queue used for purging cached content within Drupal using the drush utility
+#
+PROGNAME=$(basename -- $0)
+PROGPATH=$(echo $0 | sed -e 's,[\\/][^\\/][^\\/]*$,,')
+REVISION="0.1.0"
+PATH="/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+
+. "$PROGPATH"/utils.sh
+
+### Static Content
+readonly numrex='^[0-9]+$'
+
+### Variables
+NUMBER_OF_ITEMS=0
+TOTAL_PROCESSING=0
+TOTAL_SUCCEEDED=0
+TOTAL_FAILED=0
+TOTAL_NOT_SUPPORTED=0
+VERSION=0
+VERBOSE=0
+
+RESPONSE="QUEUE"
+DRUPAL_PATH=""
+DRUSH_PATH=""
+WARN_VALUE=0
+CRIT_VALUE=0
+
+# parse command line
+usage () {
+  echo ""
+  echo "usage: $PROGNAME [-vV] -p <drupal root> -d <drush root> -w <value> -c <value>"
+  echo "     -v             		- print out version information"
+  echo "     --version"
+  echo "     -V                         - print verbose information"
+  echo "     --verbose"
+  echo "     -p <drupal root>		- path to the root of the Drupal site"
+  echo "     -d <drush path> 		- path to drush (absolute or relative to the Drupal site)"
+  echo "     -w <warn count>            - drush queue size WARNING value"
+  echo "     -c <critical count>        - drush queue size CRITICAL value"
+  exit $1 || $STATE_UNKNOWN
+}
+
+OPTS=$(getopt --name "${PROGNAME}" --options vVp:d:w:c: --long version,verbose -- "$@")
+[ $? -eq 0 ] || {
+	usage
+}
+eval set -- "$OPTS"
+
+# extrapolate options
+for opt
+do
+	case ${1} in
+		-v | --version )
+			VERSION=1
+			;;
+		-V | --verbose )
+			VERBOSE=1
+			;;
+		-p )
+			shift
+			DRUPAL_PATH="${1}"
+			;;
+		-d )
+			shift
+			# is the drush path just relative?
+			if [[ $(echo ${1} | grep -E "^[A-Za-z0-9]" | wc -l) -gt 0  ]]; then
+				DRUSH_PATH="${DRUPAL_PATH%\/}/${1}"
+
+			# was the drush path provided relative to the 'current' directory
+			elif [[ $(echo ${1} | grep -E "^\.\/" | wc -l) -gt 0 ]]; then
+				DRUSH_PATH="${DRUPAL_PATH%\/}/$(echo "${1}"|sed 's/\.\/\(.*\)/\1/g')"
+
+			# drush path was absolute
+			else
+				DRUSH_PATH="${1}"
+			fi
+			;;
+		-c )
+			shift
+			CRIT_VALUE=${1}
+			;;
+		-w )
+			shift
+			WARN_VALUE=${1}
+			;;
+	esac
+	shift
+done
+
+# ensure required options
+if [ "${DRUPAL_PATH}" == "" ] || [ "${DRUSH_PATH}" == "" ] || [ ${WARN_VALUE} -eq 0 ] || [ ${CRIT_VALUE} -eq 0 ]; then
+	usage $STATE_UNKNOWN
+fi
+
+if [ $VERBOSE -eq 1 ]; then
+	echo "DRUSH_PATH: $DRUPAL_PATH"
+	echo "DRUSH_PATH: $DRUSH_PATH"
+	echo "WARN_VALUE: $WARN_VALUE"
+	echo "CRIT_VALUE: $CRIT_VALUE"
+fi
+
+# verify drupal path
+[ -d $DRUPAL_PATH ] || {
+	echo "FATAL:Drupal location $DRUPAL_PATH not found."
+	usage $STATE_CRITICAL
+}
+
+# verify drush exists
+[ -f $DRUSH_PATH ] || {
+	echo "FATAL: Drupal drush executable not found at $DRUSH_PATH"
+        usage $STATE_CRITICAL
+}
+# verify drush is executable
+[ -f $DRUSH_PATH ] && [ -x $DRUSH_PATH ] || {
+	echo "WARNING: Drupal drush executable at $DRUSH_PATH appears to be non-executable."
+        usage $STATE_UNKNOWN
+}
+
+# display versions and exit
+if [ $VERSION -eq 1 ]; then
+	echo "${PROGNAME} version: ${REVISION}"
+	$DRUSH_PATH status|grep -E "(Drush|Drupal|PHP) version"|sort
+	exit $STATE_OK
+fi
+
+# Run the Drush Queue Check
+DRUSH_QUEUE_STATS="$( $DRUSH_PATH p:queue-stats | cut -b1-23 )"
+
+NUMBER_OF_ITEMS="$( echo "$DRUSH_QUEUE_STATS" | grep -A1 "NUMBER_OF_ITEMS" | tail -1 | tr -d ' ' )"
+TOTAL_PROCESSING="$( echo "$DRUSH_QUEUE_STATS" | grep -A1 "TOTAL_PROCESSING" | tail -1 | tr -d ' ' )"
+TOTAL_SUCCEEDED="$( echo "$DRUSH_QUEUE_STATS" | grep -A1 "TOTAL_SUCCEEDED" | tail -1 | tr -d ' ' )"
+TOTAL_FAILED="$( echo "$DRUSH_QUEUE_STATS" | grep -A1 "TOTAL_FAILED" | tail -1 | tr -d ' ' )"
+TOTAL_NOT_SUPPORTED="$( echo "$DRUSH_QUEUE_STATS" | grep -A1 "TOTAL_NOT_SUPPORTED" | tail -1 | tr -d ' ' )"
+
+# ensure output has been correctly filtered
+[[ ${NUMBER_OF_ITEMS} =~ $numrex ]] || [[ ${TOTAL_PROCESSING} =~ $numrex ]] || [[ ${TOTAL_SUCCEEDED} =~ $numrex ]] || [[ ${TOTAL_FAILED} =~ $numrex ]] || [[ ${TOTAL_NOT_SUPPORTED} =~ $numrex ]] || {
+	RESPONSE="${RESPONSE} UNKNOWN - Queue Items: $NUMBER_OF_ITEMS | ${TOTAL_PROCESSING};;; ${TOTAL_SUCCEEDED};;; ${TOTAL_FAILED};;; ${TOTAL_NOT_SUPPORTED};;;"
+	echo "${RESPONSE}"
+	exit $STATE_UNKNOWN
+}
+
+if [[ ${NUMBER_OF_ITEMS} -ge ${CRIT_VALUE} ]]; then
+	RESPONSE="${RESPONSE} CRITICAL - Queue Items: $NUMBER_OF_ITEMS | ${TOTAL_PROCESSING};;; ${TOTAL_SUCCEEDED};;; ${TOTAL_FAILED};;; ${TOTAL_NOT_SUPPORTED};;;"
+	echo "${RESPONSE}"
+	exit $STATE_CRITICAL
+
+elif [[ ${NUMBER_OF_ITEMS} -ge ${WARN_VALUE} ]] && [[ ${NUMBER_OF_ITEMS} -lt ${CRIT_VALUE} ]]; then
+	RESPONSE="${RESPONSE} WARNING - Queue Items: $NUMBER_OF_ITEMS | ${TOTAL_PROCESSING};;; ${TOTAL_SUCCEEDED};;; ${TOTAL_FAILED};;; ${TOTAL_NOT_SUPPORTED};;;"
+	echo "${RESPONSE}"
+	exit $STATE_WARNING
+
+else
+	RESPONSE="${RESPONSE} OK - Queue Items: $NUMBER_OF_ITEMS | ${TOTAL_PROCESSING};;; ${TOTAL_SUCCEEDED};;; ${TOTAL_FAILED};;; ${TOTAL_NOT_SUPPORTED};;;"
+	echo "${RESPONSE}"
+	exit $STATE_OK
+fi
