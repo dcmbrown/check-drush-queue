@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 #
-# file: check_purge_queue
+# file: check_drush_queue
 # description: checks the status of the queue used for purging cached content within Drupal using the drush utility
 #
+# author: Dan Brown
+# repo: https://github.com/dcmbrown/check-drush-queue
+#
+
 PROGNAME=$(basename -- $0)
 PROGPATH=$(echo $0 | sed -e 's,[\\/][^\\/][^\\/]*$,,')
 REVISION="0.1.0"

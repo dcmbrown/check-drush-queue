@@ -6,6 +6,7 @@ This script covers the use of site and server integrated drush command and does 
 
 ### Usage ###
 
+```
 usage: check_drush_queue [-vV] -p <drupal root> -d <drush path> -w <value> -c <value>
      -v             	    - print out version information
      --version
@@ -15,6 +16,7 @@ usage: check_drush_queue [-vV] -p <drupal root> -d <drush path> -w <value> -c <v
      -d <drush path> 	    - path to drush (absolute, or relative to the Drupal root)
      -w <warn count>        - drush queue size WARNING value
      -c <critical count>    - drush queue size CRITICAL value
+```
 
 ### Setup ###
 
@@ -23,7 +25,7 @@ nagios plugin directory in `/usr/lib64/nagios/plugins/` or another location of y
 
 #### Using NRPE ####
 
-Setup a command within your nrpe.cfg file (usually /etc/nagios/nrpe.cfg) on the server the Drupal site exists on which Nagios can poll:
+Setup a command within your nrpe.cfg file (usually `/etc/nagios/nrpe.cfg`) on the server the Drupal site exists on which Nagios can poll:
 
 example:
 ```
@@ -59,4 +61,3 @@ If your system is also running SELinux (eg. RedHat EL 7/8/9 or a distribution ba
 setsebool -P nagios_run_sudo 1
 ```
 This tells SELinux that nagios(nrpe) is allowed to run sudo commands.
- 
