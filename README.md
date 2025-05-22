@@ -56,7 +56,13 @@ Defaults:nrpe !requiretty
 nrpe	ALL=(ALL)	NOPASSWD:	/usr/lib64/nagios/plugins/check_drush_queue
 ```
 
-If your system is also running SELinux (eg. RedHat EL 7/8/9 or a distribution based off of it) your commands will also likely be blocked.  To have SELinux allow the NRPE user to be able to run sudo commands one will have to tell SELinux to do so.
+If your system is also running SELinux (eg. RedHat EL 7/8/9 or a distribution based off of it) your commands will also likely be blocked in two different spots.
+The first requires the correct SELinux permissions on the `check_drush_queue` script.
+```
+chcon -u system_u -t nagios_unconfined_plugin_exec_t /usr/lib64/nagios/plugins/check_drush_queue
+```
+
+Then to have SELinux allow the NRPE user to be able to run sudo commands one will have to tell SELinux to do so.
 ```
 setsebool -P nagios_run_sudo 1
 ```
